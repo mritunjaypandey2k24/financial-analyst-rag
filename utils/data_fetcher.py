@@ -1,60 +1,59 @@
 import os
 import requests
-from typing import List
 
-
-def fetch_sec_filings(ticker: str, filing_type: str, save_directory: str, num_filings: int = 10):
+def fetch_sec_filings(ticker: str, filing_type: str, save_directory: str, num_filings: int = 5):
     """
     Fetch financial filings (e.g., 10-K, 10-Q) for a given company ticker symbol from the SEC EDGAR database.
 
     Args:
-        ticker (str): The stock ticker symbol of the company (e.g., 'AAPL', 'TSLA').
+        ticker (str): The CENTRAL INDEX KEY (CIK) or stock ticker symbol (e.g., 'AAPL', 'MSFT').
         filing_type (str): Type of filing to fetch (e.g., '10-K', '10-Q').
         save_directory (str): Directory to save fetched filings.
-        num_filings (int): The number of filings to download (default: 10).
+        num_filings (int): Number of filings to download (default: 5).
     """
     # Ensure the save directory exists
     os.makedirs(save_directory, exist_ok=True)
 
-    # User-Agent header for SEC EDGAR requests (standard requirement)
+    # SEC User-Agent header (required by EDGAR system)
     headers = {
-        "User-Agent": "Your Name <your-email@example.com>",  # Update this with your details
+        "User-Agent": "Your Name <your-email@example.com>",
         "Accept-Encoding": "gzip, deflate",
         "Host": "www.sec.gov"
     }
 
-    # Base SEC EDGAR URL for fetching company submissions
+    # EDGAR base endpoint for fetching CIK filings
     base_url = f"https://data.sec.gov/submissions/CIK{ticker}.json"
 
-    # Retrieve company data
-    print(f"Fetching company data for ticker '{ticker}'...")
+    print(f"Fetching company filings for CIK '{ticker}'...")
     response = requests.get(base_url, headers=headers)
 
     if response.status_code != 200:
-        print(f"Failed to fetch data for ticker {ticker}: HTTP {response.status_code}")
+        print(f"Unable to retrieve data for CIK {ticker}: HTTP {response.status_code}")
         return
 
     company_data = response.json()
 
+    # Access lists of recent filings
     if "filings" not in company_data or "recent" not in company_data["filings"]:
-        print(f"No filings found for ticker {ticker}.")
+        print(f"Filings not found for CIK '{ticker}'.")
         return
 
-    recent_filings = company_data["filings"]["recent"]
-    accessions = recent_filings["accessionNumber"]
-    form_types = recent_filings["form"]
+    accessions = company_data["filings"]["recent"]["accessionNumber"]
+    form_types = company_data["filings"]["recent"]["form"]
 
-    # Select filings of the specified type
-    matching_filings = [accession for accession, form in zip(accessions, form_types) if form == filing_type]
+    # Filter filings by type (e.g., '10-K', '10-Q')
+    matching_filings = [
+        acc for acc, form in zip(accessions, form_types) if form == filing_type
+    ]
 
     if not matching_filings:
-        print(f"No {filing_type} filings found for ticker {ticker}.")
+        print(f"No {filing_type} filings found for CIK '{ticker}'.")
         return
 
-    # Limit to requested number of filings
+    # Limit the number of fetched filings
     matching_filings = matching_filings[:num_filings]
 
-    # Fetch and save each filing
+    # Download and save each filing
     for accession in matching_filings:
         filing_url = f"https://www.sec.gov/Archives/edgar/data/{ticker}/{accession.replace('-', '')}/{accession}-index.htm"
         print(f"Downloading filing: {filing_url}")
@@ -68,10 +67,13 @@ def fetch_sec_filings(ticker: str, filing_type: str, save_directory: str, num_fi
         else:
             print(f"Failed to download filing {accession}: HTTP {filing_response.status_code}")
 
-    print(f"Completed downloading {len(matching_filings)} filings for ticker '{ticker}'.")
+    print(f"Successfully downloaded {len(matching_filings)} filings of type {filing_type} for CIK '{ticker}'.")
 
-
+# Example usage
 if __name__ == "__main__":
-    # Example usage
-    # Fetch 10-K (Annual Reports) filings for Apple Inc. ('AAPL')
-    fetch_sec_filings(ticker="0000320193", filing_type="10-K", save_directory="data/sec_filings")
+    fetch_sec_filings(
+        ticker="0000320193",  # CIK for Apple Inc.
+        filing_type="10-K",   # Fetch Annual Reports
+        save_directory="data/sec_filings/",
+        num_filings=3         # Number of filings to fetch
+    )
