@@ -1,79 +1,61 @@
 import os
 import requests
+import time
 
 def fetch_sec_filings(ticker: str, filing_type: str, save_directory: str, num_filings: int = 5):
-    """
-    Fetch financial filings (e.g., 10-K, 10-Q) for a given company ticker symbol from the SEC EDGAR database.
-
-    Args:
-        ticker (str): The CENTRAL INDEX KEY (CIK) or stock ticker symbol (e.g., 'AAPL', 'MSFT').
-        filing_type (str): Type of filing to fetch (e.g., '10-K', '10-Q').
-        save_directory (str): Directory to save fetched filings.
-        num_filings (int): Number of filings to download (default: 5).
-    """
-    # Ensure the save directory exists
+    # 1. Pad CIK to 10 digits
+    cik = str(ticker).zfill(10)
     os.makedirs(save_directory, exist_ok=True)
 
-    # SEC User-Agent header (required by EDGAR system)
     headers = {
-        "User-Agent": "Your Name <your-email@example.com>",
+        "User-Agent": "Mritunjay Pandey <mritunjaypandey.ee@gmail.com>", # Use your verified info
         "Accept-Encoding": "gzip, deflate",
         "Host": "www.sec.gov"
     }
 
-    # EDGAR base endpoint for fetching CIK filings
-    base_url = f"https://data.sec.gov/submissions/CIK{ticker}.json"
+    # API endpoint for company metadata
+    base_url = f"https://data.sec.gov/submissions/CIK{cik}.json"
 
-    print(f"Fetching company filings for CIK '{ticker}'...")
-    response = requests.get(base_url, headers=headers)
+    try:
+        response = requests.get(base_url, headers=headers)
+        response.raise_for_status()
+        company_data = response.json()
+        
+        recent_filings = company_data["filings"]["recent"]
+        
+        # Filter for matching filing types
+        matches = []
+        for i, form in enumerate(recent_filings["form"]):
+            if form == filing_type:
+                matches.append({
+                    "accession": recent_filings["accessionNumber"][i],
+                    "filename": recent_filings["primaryDocument"][i]
+                })
+            if len(matches) >= num_filings:
+                break
 
-    if response.status_code != 200:
-        print(f"Unable to retrieve data for CIK {ticker}: HTTP {response.status_code}")
-        return
+        for item in matches:
+            accession_raw = item["accession"]
+            accession_clean = accession_raw.replace("-", "")
+            primary_doc = item["filename"]
 
-    company_data = response.json()
+            # Construct URL for the ACTUAL document (HTM format)
+            document_url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession_clean}/{primary_doc}"
+            
+            print(f"Downloading {filing_type}: {document_url}")
+            
+            # SEC Rate limit: 10 requests per second. Adding a small sleep is safer for bulk.
+            time.sleep(0.1) 
+            
+            doc_response = requests.get(document_url, headers=headers)
+            if doc_response.status_code == 200:
+                # Save as .html for better parsing later
+                file_path = os.path.join(save_directory, f"{accession_raw}.html")
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(doc_response.text)
+                print(f"Successfully saved to {file_path}")
 
-    # Access lists of recent filings
-    if "filings" not in company_data or "recent" not in company_data["filings"]:
-        print(f"Filings not found for CIK '{ticker}'.")
-        return
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
-    accessions = company_data["filings"]["recent"]["accessionNumber"]
-    form_types = company_data["filings"]["recent"]["form"]
-
-    # Filter filings by type (e.g., '10-K', '10-Q')
-    matching_filings = [
-        acc for acc, form in zip(accessions, form_types) if form == filing_type
-    ]
-
-    if not matching_filings:
-        print(f"No {filing_type} filings found for CIK '{ticker}'.")
-        return
-
-    # Limit the number of fetched filings
-    matching_filings = matching_filings[:num_filings]
-
-    # Download and save each filing
-    for accession in matching_filings:
-        filing_url = f"https://www.sec.gov/Archives/edgar/data/{ticker}/{accession.replace('-', '')}/{accession}-index.htm"
-        print(f"Downloading filing: {filing_url}")
-
-        filing_response = requests.get(filing_url, headers=headers)
-        if filing_response.status_code == 200:
-            file_path = os.path.join(save_directory, f"{accession}.html")
-            with open(file_path, "w", encoding="utf-8") as file:
-                file.write(filing_response.text)
-            print(f"Saved filing to {file_path}")
-        else:
-            print(f"Failed to download filing {accession}: HTTP {filing_response.status_code}")
-
-    print(f"Successfully downloaded {len(matching_filings)} filings of type {filing_type} for CIK '{ticker}'.")
-
-# Example usage
-if __name__ == "__main__":
-    fetch_sec_filings(
-        ticker="0000320193",  # CIK for Apple Inc.
-        filing_type="10-K",   # Fetch Annual Reports
-        save_directory="data/sec_filings/",
-        num_filings=3         # Number of filings to fetch
-    )
+# Your loop logic remains correct!
