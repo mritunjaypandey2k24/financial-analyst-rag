@@ -18,7 +18,7 @@ class FinancialRAGAgent:
         context_indices = self.retriever.query(query)
         relevant_context = "".join([documents[i] for i in context_indices])
 
-        inputs = self.tokenizer(f'{relevant_context}
-Question: {query}', return_tensors='pt').to('cuda')
+        # FIX: Properly format the f-string
+        inputs = self.tokenizer(f'{relevant_context} Question: {query}', return_tensors='pt').to('cuda')
         outputs = self.model.generate(inputs['input_ids'], max_length=512)
         return self.tokenizer.decode(outputs[0])
