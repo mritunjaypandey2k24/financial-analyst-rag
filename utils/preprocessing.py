@@ -2,54 +2,50 @@ import os
 from bs4 import BeautifulSoup
 from PyPDF2 import PdfReader
 
-def extract_pdf_text(file_path: str) -> str:
+def extract_text(file_path: str) -> str:
     """
-    Extract raw text from a PDF or HTML file with robust error handling.
+    Extract clean, human-readable text from SEC iXBRL (HTML) or PDF.
     """
+    file_ext = os.path.splitext(file_path)[1].lower()
+    
     try:
-        # Convert path to lowercase to avoid .HTML vs .html issues
-        file_ext = os.path.splitext(file_path)[1].lower()
+        if file_ext in [".html", ".htm"]:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                soup = BeautifulSoup(f.read(), "html.parser")
+                
+                # 1. REMOVE SYSTEM/META DATA: 
+                # This removes the huge block of XML/XBRL metadata at the top 
+                # that isn't part of the actual report text.
+                for meta in soup(["ix:header", "ix:hidden", "style", "script"]):
+                    meta.decompose()
 
-        if file_ext == ".html" or file_ext == ".htm":
-            # Handle HTML files
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as file:
-                content = file.read()
-                # If the file is empty or just whitespace
-                if not content.strip():
-                    return ""
+                # 2. EXTRACT TEXT WITH SEPARATOR:
+                # separator=' ' prevents words from being mashed together 
+                # when removing table cells (e.g., "Total""$100" -> "Total $100")
+                raw_text = soup.get_text(separator=' ')
                 
-                soup = BeautifulSoup(content, "html.parser")
-                
-                # Remove script and style elements from extraction
-                for script_or_style in soup(["script", "style"]):
-                    script_or_style.decompose()
-                
-                # Get text and clean up whitespace
-                text = soup.get_text(separator=' ')
-                return " ".join(text.split())
+                return clean_text(raw_text)
 
         elif file_ext == ".pdf":
-            # Handle PDF files
             reader = PdfReader(file_path)
-            text = ""
-            for page in reader.pages:
-                extracted = page.extract_text()
-                if extracted:
-                    text += extracted + " "
-            return text
-        
+            text = " ".join([page.extract_text() for page in reader.pages if page.extract_text()])
+            return clean_text(text)
+            
         else:
-            raise ValueError(f"Unsupported file type: {file_ext}")
+            print(f"Skipping unsupported file: {file_path}")
+            return ""
 
     except Exception as e:
-        # This will now tell you exactly which parser failed
-        raise RuntimeError(f"Error processing {os.path.basename(file_path)}: {e}")
+        print(f"Error processing {file_path}: {e}")
+        return ""
 
 def clean_text(text: str) -> str:
-    """Simple cleaner to remove extra whitespace and newlines."""
+    """
+    Standardizes whitespace for better RAG performance.
+    """
     if not text:
         return ""
-    # Remove excessive newlines and tabs
-    text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
-    # Remove multiple spaces
-    return " ".join(text.split())
+    # Remove extra whitespace and newlines
+    lines = (line.strip() for line in text.splitlines())
+    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+    return " ".join(chunk for chunk in chunks if chunk)
