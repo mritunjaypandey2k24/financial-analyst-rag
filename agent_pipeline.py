@@ -3,6 +3,7 @@
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from utils.retriever import DocumentRetriever
 from typing import List
+import torch
 
 class FinancialRAGAgent:
     def __init__(self, llm_model_name: str = 'tiiuae/falcon-7b-instruct'):
