@@ -13,6 +13,10 @@ class FinancialRAGAgent:
         self.tokenizer = AutoTokenizer.from_pretrained(llm_model_name)
         self.model = AutoModelForCausalLM.from_pretrained(llm_model_name, device_map='auto')
 
+        # Define the pad token
+        if not self.tokenizer.pad_token:
+            self.tokenizer.pad_token = self.tokenizer.eos_token  # Use eos_token as pad_token
+
 
     def answer_query(self, query: str, documents: List[str]) -> str:
         """Retrieve context and generate a clean and concise answer."""
