@@ -1,0 +1,20 @@
+# Ignore dataset files
+*.csv
+*.json
+*.xls
+*.xlsx
+
+# Ignore cache
+__pycache__/
+*.py[cod]
+*.so
+
+# Ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Ignore model weights and large files
+*.h5
+*.hdf5
+*.pb
+*.onnx
+models/
