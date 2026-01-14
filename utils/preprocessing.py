@@ -1,43 +1,55 @@
-# Script for data extraction and cleaning.
-import pandas as pd
-from PyPDF2 import PdfReader
+import os
 from bs4 import BeautifulSoup
-from typing import List
+from PyPDF2 import PdfReader
 
 def extract_pdf_text(file_path: str) -> str:
     """
-    Extract raw text from a PDF or HTML file.
-
-    Args:
-        file_path (str): Path to the file (PDF or HTML).
-
-    Returns:
-        str: Extracted text.
+    Extract raw text from a PDF or HTML file with robust error handling.
     """
     try:
-        if file_path.endswith(".html"):
+        # Convert path to lowercase to avoid .HTML vs .html issues
+        file_ext = os.path.splitext(file_path)[1].lower()
+
+        if file_ext == ".html" or file_ext == ".htm":
             # Handle HTML files
-            with open(file_path, "r", encoding="utf-8") as file:
-                soup = BeautifulSoup(file.read(), "html.parser")
-                return soup.get_text()
-        elif file_path.endswith(".pdf"):
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as file:
+                content = file.read()
+                # If the file is empty or just whitespace
+                if not content.strip():
+                    return ""
+                
+                soup = BeautifulSoup(content, "html.parser")
+                
+                # Remove script and style elements from extraction
+                for script_or_style in soup(["script", "style"]):
+                    script_or_style.decompose()
+                
+                # Get text and clean up whitespace
+                text = soup.get_text(separator=' ')
+                return " ".join(text.split())
+
+        elif file_ext == ".pdf":
             # Handle PDF files
             reader = PdfReader(file_path)
-            text = "".join([page.extract_text() for page in reader.pages])
+            text = ""
+            for page in reader.pages:
+                extracted = page.extract_text()
+                if extracted:
+                    text += extracted + " "
             return text
+        
         else:
-            raise ValueError("Unsupported file type. Only PDF and HTML files are supported.")
+            raise ValueError(f"Unsupported file type: {file_ext}")
+
     except Exception as e:
-        raise RuntimeError(f"Error processing file {file_path}: {e}")
+        # This will now tell you exactly which parser failed
+        raise RuntimeError(f"Error processing {os.path.basename(file_path)}: {e}")
 
-def clean_text(raw_text: str) -> str:
-    """
-    Clean raw text by removing unwanted characters.
-
-    Args:
-        raw_text (str): The raw text extracted from the document.
-
-    Returns:
-        str: Cleaned text.
-    """
-    return raw_text.replace('\n', ' ').replace('\t', ' ').strip()
+def clean_text(text: str) -> str:
+    """Simple cleaner to remove extra whitespace and newlines."""
+    if not text:
+        return ""
+    # Remove excessive newlines and tabs
+    text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+    # Remove multiple spaces
+    return " ".join(text.split())
